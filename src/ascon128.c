@@ -34,10 +34,9 @@ static uint64_t rotr(uint64_t x,int n){
     return (x>>n)|(x<<(64-n));
 }
 
-/* ---------- permutation ---------- */
-static void ascon_round(state_t *s,int r){
-    s->x2 ^= RC[r];
-
+/* ---------- S-BOX (EXTRACTED) ---------- */
+void __attribute__((noinline)) ascon_sbox(state_t *s)
+{
     uint64_t t0=~s->x0,t1=~s->x1,t2=~s->x2,t3=~s->x3,t4=~s->x4;
 
     s->x0 ^= (t1 & s->x2);
@@ -50,6 +49,14 @@ static void ascon_round(state_t *s,int r){
     s->x0 ^= s->x4;
     s->x3 ^= s->x2;
     s->x2 = ~s->x2;
+}
+
+/* ---------- permutation ---------- */
+void __attribute__((noinline)) ascon_round(state_t *s,int r){
+    s->x2 ^= RC[r];
+
+    /* call S-box as separate function */
+    ascon_sbox(s);
 
     s->x0 ^= rotr(s->x0,19) ^ rotr(s->x0,28);
     s->x1 ^= rotr(s->x1,61) ^ rotr(s->x1,39);
@@ -58,7 +65,7 @@ static void ascon_round(state_t *s,int r){
     s->x4 ^= rotr(s->x4,7)  ^ rotr(s->x4,41);
 }
 
-static void permute(state_t *s,int rounds){
+void __attribute__((noinline)) permute(state_t *s,int rounds){
     for(int i=0;i<rounds;i++) ascon_round(s,i);
 }
 
@@ -93,20 +100,14 @@ void ascon128_encrypt(
     s.x3=load64(n);
     s.x4=load64(n+8);
 
-    dump_state("init", &s);
-
     permute(&s,12);
-
-    dump_state("after permute(12)", &s);
 
     s.x3 ^= load64(k);
     s.x4 ^= load64(k+8);
 
     while(adlen>=RATE){
         s.x0 ^= load64(ad);
-        dump_state("after absorb AD block", &s);
         permute(&s,6);
-        dump_state("after permute(6) (AD)", &s);
         ad+=RATE; adlen-=RATE;
     }
 
@@ -114,18 +115,14 @@ void ascon128_encrypt(
     memcpy(buf,ad,adlen);
     buf[adlen]=0x80;
     s.x0 ^= load64(buf);
-    dump_state("after absorb AD last/pad", &s);
     permute(&s,6);
-    dump_state("after permute(6) (AD pad)", &s);
 
     s.x4 ^= 1;
 
     while(ptlen>=RATE){
         s.x0 ^= load64(pt);
-        dump_state("after xor plaintext block into x0", &s);
         store64(ct,s.x0);
         permute(&s,6);
-        dump_state("after permute(6) (enc block)", &s);
         pt+=RATE; ct+=RATE; ptlen-=RATE;
     }
 
@@ -133,14 +130,11 @@ void ascon128_encrypt(
     memcpy(buf,pt,ptlen);
     buf[ptlen]=0x80;
     s.x0 ^= load64(buf);
-    dump_state("after xor last partial plaintext/pad", &s);
 
     store64(buf,s.x0);
     memcpy(ct,buf,ptlen);
 
     permute(&s,12);
-
-    dump_state("after final permute(12)", &s);
 
     s.x3 ^= load64(k);
     s.x4 ^= load64(k+8);

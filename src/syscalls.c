@@ -1,28 +1,54 @@
+#include <sys/types.h>
 #include <sys/stat.h>
-#include <stdint.h>
 
-/* Minimal syscall stubs for bare-metal ARM Cortex-M3.
- * These satisfy the linker when no OS is present.
- * Rainbow's emulator never actually calls these —
- * they exist only to produce a valid ELF. */
+extern char _end; // defined by linker
 
-void _exit(int status) { while(1); }
-int  _kill(int pid, int sig) { return -1; }
-int  _getpid(void) { return 1; }
-int  _write(int fd, char *buf, int len) { return len; }
-int  _read(int fd, char *buf, int len) { return 0; }
-int  _close(int fd) { return -1; }
-int  _fstat(int fd, struct stat *st) { st->st_mode = S_IFCHR; return 0; }
-int  _isatty(int fd) { return 1; }
-int  _lseek(int fd, int offset, int whence) { return 0; }
+caddr_t _sbrk(int incr) {
+    static char *heap_end;
+    char *prev_heap_end;
 
-/* Heap stub — gives Rainbow a small heap to work with */
-static uint8_t heap[4096];
-static uint8_t *heap_ptr = heap;
+    if (heap_end == 0)
+        heap_end = &_end;
 
-void *_sbrk(int incr)
-{
-    uint8_t *prev = heap_ptr;
-    heap_ptr += incr;
-    return (void *)prev;
+    prev_heap_end = heap_end;
+    heap_end += incr;
+
+    return (caddr_t) prev_heap_end;
+}
+
+int _write(int file, char *ptr, int len) {
+    return len; // pretend we printed
+}
+
+int _read(int file, char *ptr, int len) {
+    return 0;
+}
+
+int _close(int file) {
+    return -1;
+}
+
+int _fstat(int file, struct stat *st) {
+    st->st_mode = S_IFCHR;
+    return 0;
+}
+
+int _isatty(int file) {
+    return 1;
+}
+
+int _lseek(int file, int ptr, int dir) {
+    return 0;
+}
+
+int _kill(int pid, int sig) {
+    return -1;
+}
+
+int _getpid(void) {
+    return 1;
+}
+
+void _exit(int status) {
+    while (1) {}
 }
