@@ -52,11 +52,14 @@ void __attribute__((noinline)) ascon_sbox(state_t *s)
 }
 
 /* ---------- permutation ---------- */
+void __attribute__((noinline)) side_channel_probe(uint8_t value);
+
 void __attribute__((noinline)) ascon_round(state_t *s,int r){
     s->x2 ^= RC[r];
 
     /* call S-box as separate function */
     ascon_sbox(s);
+    side_channel_probe((uint8_t)s->x0);
 
     s->x0 ^= rotr(s->x0,19) ^ rotr(s->x0,28);
     s->x1 ^= rotr(s->x1,61) ^ rotr(s->x1,39);
@@ -71,6 +74,13 @@ void __attribute__((noinline)) permute(state_t *s,int rounds){
 
 /* ----- debug helpers ----- */
 static int ascon_verbose = 0;
+static volatile uint8_t trace_probe_sink;
+
+void __attribute__((noinline)) side_channel_probe(uint8_t value)
+{
+    trace_probe_sink = value;
+}
+
 static void dump_state(const char *tag, state_t *s){
     if(!ascon_verbose) return;
     printf("%s: x0=%016llx x1=%016llx x2=%016llx x3=%016llx x4=%016llx\n",
